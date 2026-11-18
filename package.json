@@ -1,0 +1,29 @@
+{
+  "name": "signet",
+  "version": "0.1.0",
+  "description": "Typed ed25519/sr25519 signer URIs for the FLOP CLI, so a did:key agent can use its own account. Offered for flop-labs/network#337.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "scan": "python3 scripts/secret_scan.py",
+    "patch:check": "node scripts/apply-cli-patch.mjs",
+    "check": "npm run lint && npm test && npm run scan && npm run patch:check"
+  },
+  "dependencies": {
+    "@polkadot/keyring": "14.0.3",
+    "@polkadot/util-crypto": "14.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
+  }
+}
