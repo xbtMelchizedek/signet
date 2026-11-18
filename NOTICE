@@ -1,0 +1,36 @@
+Signet
+======
+
+This repository offers a typed-signer loader and a patch against the published
+@flop-labs/cli@0.5.0 bundle, for https://github.com/flop-labs/network/issues/337.
+
+The FLOP CLI source lives in the private repository flop-labs/flop-core
+(sdk/cli). It is not publicly readable, so this is a standalone package plus a
+patch against the npm release, not a fork of flop-core.
+
+Credits
+-------
+
+@almondous published a limited local prototype of the ed25519:<secret-URI> /
+sr25519:<secret-URI> scheme against @flop-labs/cli@0.5.0, with a reconstructed
+review artifact and nine grouped checks, on issue #337. This repository
+implements that URI scheme as a shared loader, with tests and documentation,
+independently of those reconstructed files.
+
+FLOP CLI license
+----------------
+
+@flop-labs/cli@0.5.0 is licensed under MIT OR Apache-2.0,
+Copyright (c) 2025-2026 The FLOP Network Contributors.
+The official package, including its license text, is obtained from npm:
+
+  https://registry.npmjs.org/@flop-labs/cli/-/cli-0.5.0.tgz
+
+Pinned verification used here:
+
+  npm integrity  sha512-zFLbjNdWHgc6IGO0kqwtU57dNsX29XYDWaxhbe0DtRw4QPekRpvz0yb2m/1q6dtzfTFyGz+1RBK4ll4iDnpW3w==
+  dist/cli.js SHA-256  c94d7d6bdfee094c401aa5accd04faf19e6d48fd925ffd934f962c2ceca1de40
+
+The patch file is a derivative of that published work and remains under the
+same MIT OR Apache-2.0 terms. Original TypeScript in src/ is MIT,
+Copyright (c) 2026 xbtMelchizedek.

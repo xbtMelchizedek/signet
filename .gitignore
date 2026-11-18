@@ -1,0 +1,8 @@
+node_modules/
+.cache/
+dist/
+*.seed
+*.key
+*.pass
+*.keystore.json
+.env
