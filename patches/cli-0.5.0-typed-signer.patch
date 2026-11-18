@@ -1,0 +1,108 @@
+--- a/package/dist/cli.js
++++ b/package/dist/cli.js
+@@ -5034,6 +5034,22 @@
+   pair.decodePkcs8(password);
+   return pair;
+ }
++function parseTypedSecretUri(signer) {
++  const match = /^(ed25519|sr25519):(.*)$/s.exec(signer);
++  const type = match?.[1] ?? "sr25519";
++  const uri = match ? match[2] : signer;
++  if (!uri) throw new Error("typed signer URI must not be empty");
++  return { type, uri, explicit: !!match };
++}
++async function loadTypedUriPair(signer) {
++  const { type, uri } = parseTypedSecretUri(signer);
++  const [{ Keyring: Keyring6 }, { cryptoWaitReady: cryptoWaitReady5 }] = await Promise.all([
++    import("@polkadot/keyring"),
++    import("@polkadot/util-crypto")
++  ]);
++  await cryptoWaitReady5();
++  return new Keyring6({ type, ss58Format: 42 }).addFromUri(uri);
++}
+ async function sr25519KeyHex(signer, required = true) {
+   const [{ Keyring: Keyring6 }, { decodePair }, { cryptoWaitReady: cryptoWaitReady5 }] = await Promise.all([
+     import("@polkadot/keyring"),
+@@ -5042,7 +5058,7 @@
+   ]);
+   await cryptoWaitReady5();
+   const [, encodedPath, encodedEnv] = signer.split(":");
+-  const pair = signer.startsWith("keystore:") ? await loadKeystore(decodeURIComponent(encodedPath), decodeURIComponent(encodedEnv)) : new Keyring6({ type: "sr25519" }).addFromUri(signer);
++  const pair = signer.startsWith("keystore:") ? await loadKeystore(decodeURIComponent(encodedPath), decodeURIComponent(encodedEnv)) : await loadTypedUriPair(signer);
+   if (pair.type !== "sr25519") {
+     if (!required) return void 0;
+     throw new Error(`DA shard uploads are signed with sr25519; this signer is ${pair.type}`);
+@@ -5051,8 +5067,14 @@
+   return `0x${Buffer.from(secretKey).toString("hex")}${Buffer.from(publicKey).toString("hex")}`;
+ }
+ async function agentSignerConfig(signer) {
+-  const [, encodedPath, encodedEnv] = signer.split(":");
+-  return signer.startsWith("keystore:") ? { keypair: await loadKeystore(decodeURIComponent(encodedPath), decodeURIComponent(encodedEnv)) } : { signerUri: signer };
++  if (signer.startsWith("keystore:")) {
++    const [, encodedPath, encodedEnv] = signer.split(":");
++    return { keypair: await loadKeystore(decodeURIComponent(encodedPath), decodeURIComponent(encodedEnv)) };
++  }
++  if (parseTypedSecretUri(signer).explicit) {
++    return { keypair: await loadTypedUriPair(signer) };
++  }
++  return { signerUri: signer };
+ }
+ async function createClient(rpcUrl, signer) {
+   const { FlopClient: FlopClient7 } = await import("@flop-labs/sdk");
+@@ -5063,6 +5085,9 @@
+       await loadKeystore(decodeURIComponent(encodedPath), decodeURIComponent(encodedEnv))
+     );
+   }
++  if (signer && parseTypedSecretUri(signer).explicit) {
++    return FlopClient7.createWithKeypair(rpcUrl, await loadTypedUriPair(signer));
++  }
+   const opts = { endpoint: rpcUrl };
+   if (signer) opts.signer = signer;
+   return FlopClient7.create(opts);
+@@ -14348,7 +14373,7 @@
+ var program = new Command51();
+ var outputMode = outputModeFromArgv(process.argv.slice(2));
+ setOutputMode(outputMode);
+-program.name("flop").description("FLOP Network CLI").version(operatorVersion(JSON.parse(readFileSync2(join12(packageRoot, "package.json"), "utf8")).version)).option("--offline", "Skip the operator release check").addOption(new Option8("--network <network>", "Network profile").choices(["local", "devnet", "testnet", "mainnet"]).default("local")).option("--rpc <url>", "RPC endpoint override").option("--signer <uri>", "Signer URI (local/dev only; required outside local unless --keystore)").option("--keystore <path>", "Encrypted Polkadot JSON keystore").option("--password-env <name>", "Environment variable containing the keystore password").addOption(new Option8("--output <mode>", "Output mode").choices(["human", "json", "agent"]).default("human")).option("--json", "Output as JSON");
++program.name("flop").description("FLOP Network CLI").version(operatorVersion(JSON.parse(readFileSync2(join12(packageRoot, "package.json"), "utf8")).version)).option("--offline", "Skip the operator release check").addOption(new Option8("--network <network>", "Network profile").choices(["local", "devnet", "testnet", "mainnet"]).default("local")).option("--rpc <url>", "RPC endpoint override").option("--signer <uri>", "Signer secret URI (local/dev only; required outside local unless --keystore). Prefix ed25519:<secret-URI> or sr25519:<secret-URI>; unprefixed URIs stay sr25519").option("--keystore <path>", "Encrypted Polkadot JSON keystore").option("--password-env <name>", "Environment variable containing the keystore password").addOption(new Option8("--output <mode>", "Output mode").choices(["human", "json", "agent"]).default("human")).option("--json", "Output as JSON");
+ program.addCommand(healthCmd());
+ program.addCommand(balanceCmd());
+ program.addCommand(gpuCmd());
+--- a/package/README.md
++++ b/package/README.md
+@@ -64,12 +64,18 @@
+ |--------|-------------|---------|
+ | `--network <name>` | `local`, `devnet`, `testnet`, or `mainnet` | `local` |
+ | `--rpc <url>` | Explicit RPC override | selected profile |
+-| `--signer <uri>` | Local signer URI | `//Alice` on local only |
++| `--signer <uri>` | Secret URI; prefix `ed25519:<secret-URI>` or `sr25519:<secret-URI>`. Unprefixed URIs stay sr25519. | `//Alice` on local only |
+ | `--keystore <path>` | Encrypted Polkadot JSON keystore | — |
+ | `--password-env <name>` | Environment variable containing its password | — |
+ | `--output <mode>` | `human`, pretty `json`, or compact `agent` | `human` |
+ | `--json` | Output as JSON | false |
+ 
++A Technocore or tclk agent that holds an Ed25519 `did:key` should pass
++`--signer ed25519:<secret-URI>` so the FLOP AccountId32 is that same public
++key. A plain `--signer <secret-URI>` still derives sr25519, which is a
++different account. Encrypted keystores (`--keystore`) already keep the type
++they were imported or generated with.
++
+ ### Commands
+ 
+ #### Unified role onboarding
+--- a/package/CHANGELOG.md
++++ b/package/CHANGELOG.md
+@@ -7,6 +7,13 @@
+ 
+ ## [Unreleased]
+ 
++### Added
++
++- `--signer` accepts an explicit `ed25519:<secret-URI>` or
++  `sr25519:<secret-URI>` prefix so a did:key agent can use its own ed25519
++  account. Unprefixed secret URIs stay sr25519. Encrypted keystores are
++  unchanged.
++
+ ## [0.5.0] - 2026-11-12
+ 
+ ### Added
